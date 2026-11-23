@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Resolve real path even when called through a symlink
+SRC="$(readlink -f "${BASH_SOURCE[0]}")"
+APP="$(dirname "$SRC")"
+VENV="$APP/.venv-run"
+URL="http://127.0.0.1:8800"
+
+# app.py looks for templates/index.html; link a top-level index.html there if needed
+if [ ! -f "$APP/templates/index.html" ] && [ -f "$APP/index.html" ]; then
+    mkdir -p "$APP/templates" && ln -s ../index.html "$APP/templates/index.html"
+fi
+
+if [ ! -x "$VENV/bin/python" ]; then
+    echo "[t-fold] First run - setting up environment..."
+    command -v python3 >/dev/null || { echo "[t-fold] python3 not found."; exit 1; }
+    python3 -m venv "$VENV" || { echo "[t-fold] venv failed (try: sudo apt install python3-venv)"; rm -rf "$VENV"; exit 1; }
+    "$VENV/bin/pip" install -q -r "$APP/requirements.txt" || { echo "[t-fold] Dependency install failed."; rm -rf "$VENV"; exit 1; }
+fi
+
+( sleep 2; xdg-open "$URL" >/dev/null 2>&1 || true ) &
+echo "[t-fold] Running at $URL  (Ctrl+C to stop)"
+exec "$VENV/bin/python" "$APP/app.py"

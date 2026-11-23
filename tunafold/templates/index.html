@@ -1,0 +1,412 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ app_name }} - PostgreSQL instances</title>
+{% raw %}
+<style>
+:root{--plate:#2a2e35;--plate-hi:#363b44;--plate-lo:#22252b;--edge:#0f1114;--bevel:#4a505b;
+--ink:#e6e9ed;--muted:#98a0ac;--line:#3b414b;--field:#1b1e23;
+--accent:#3f86c7;--accent-d:#2c64a0;--ok:#58b784;--bad:#d9594c;
+--term:#101317;--term-ink:#d3dce5;
+--ui:Verdana,Tahoma,"Segoe UI",system-ui,sans-serif;--mono:Consolas,"Cascadia Code",ui-monospace,Menlo,monospace;--blk:"Arial Black",Impact,Verdana,sans-serif}
+*{box-sizing:border-box}
+body{margin:0;color:var(--ink);font:13px/1.5 var(--ui);min-height:100vh;
+background:radial-gradient(circle at 50% 50%,#3a3f47 0 4px,#2c3036 4.5px 6.5px,transparent 7px) 0 0/48px 48px,linear-gradient(180deg,#1f2227,#16181c) 0 0/100% 100%;background-attachment:fixed}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:-1;background:radial-gradient(ellipse at 50% 25%,transparent 35%,#000a 100%)}
+.grow{flex:1}.muted{color:var(--muted)}.err{color:var(--bad)}.empty{color:var(--muted);padding:6px}.mono{font-family:var(--mono)}
+
+/* top bar */
+.topbar{position:relative;z-index:2;display:flex;align-items:center;gap:16px;padding:16px 22px 12px;background:linear-gradient(#2d3138,#1f2227);border-bottom:4px solid var(--edge);box-shadow:inset 0 1px 0 var(--bevel),0 8px 20px #0007}
+.logo{display:flex;align-items:center;gap:14px}
+.fish{display:block;animation:swim 3.2s ease-in-out infinite}
+.bricks{display:flex;gap:4px;padding-top:7px}
+.bricks i{--stud:#c3c9d0;position:relative;font:normal 21px/34px var(--blk);width:30px;height:34px;text-align:center;border-radius:3px;color:#1a1d21;background:linear-gradient(#d6dbe1,#a7aeb8);box-shadow:inset 0 2px 0 #fff8,inset 0 -3px 0 #0003,0 3px 0 var(--edge);animation:drop .8s cubic-bezier(.3,1.6,.5,1) both;animation-delay:calc(var(--i)*70ms)}
+.bricks i.f{--stud:#5b99d3;color:#0c1a29;background:linear-gradient(#63a1db,#3d75ad)}
+.bricks i::before{content:"";position:absolute;left:4px;right:4px;top:-5px;height:5px;background:radial-gradient(circle at 25% 100%,var(--stud) 0 4px,transparent 4.5px),radial-gradient(circle at 75% 100%,var(--stud) 0 4px,transparent 4.5px)}
+.hud{display:flex;gap:10px;flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;gap:8px;padding:4px 11px;background:var(--field);border:1px solid var(--line);border-radius:4px;color:var(--muted);font-size:12px;box-shadow:inset 0 2px 0 #0007}
+.led{width:8px;height:8px;border-radius:2px;background:var(--ok);animation:pulse 2s infinite}
+
+/* layout */
+.app{position:relative;z-index:1;display:grid;grid-template-columns:240px minmax(0,1fr) 420px;gap:24px;padding:28px 22px 14px;align-items:start}
+@media(max-width:1250px){.app{grid-template-columns:230px minmax(0,1fr)}#results{grid-column:1/-1}}
+@media(max-width:760px){.app{grid-template-columns:1fr}}
+#main{display:grid;gap:24px;min-width:0}
+
+/* brick panels */
+aside,.card,#results,.stat{position:relative;background:linear-gradient(var(--plate-hi),var(--plate) 26px);border:1px solid #000a;border-radius:6px}
+aside,.card,#results{box-shadow:inset 0 1px 0 var(--bevel),0 5px 0 var(--edge),0 14px 20px #0007}
+.stat{box-shadow:inset 0 1px 0 var(--bevel),0 3px 0 var(--edge)}
+aside::before,.card::before,#results::before{content:"";position:absolute;left:16px;right:16px;top:-6px;height:6px;pointer-events:none;
+background:radial-gradient(circle at 50% 100%,var(--plate-hi) 0 4px,transparent 4.5px) 0 0/28px 6px repeat-x,radial-gradient(circle at 50% 100%,#000b 0 5px,transparent 5.5px) 0 0/28px 6px repeat-x}
+aside{padding:16px 12px 14px}aside h2,#results h2{font-size:13px;margin:0 0 10px;color:var(--ink)}
+.count{background:var(--field);border:1px solid var(--line);border-radius:3px;padding:0 7px;margin-left:6px;color:var(--muted);font-weight:400}
+.side-btns{display:grid;gap:10px;margin-top:14px}
+
+/* buttons */
+button{font:inherit;color:var(--ink);cursor:pointer;padding:7px 14px;border-radius:4px;border:1px solid #000a;background:linear-gradient(#4b515c,#363b44);box-shadow:inset 0 1px 0 #fff3,0 3px 0 var(--edge);transition:transform .08s,box-shadow .08s,filter .15s}
+button:hover:not(:disabled){filter:brightness(1.18)}
+button:active:not(:disabled){transform:translateY(3px);box-shadow:inset 0 1px 0 #fff3,0 0 0 var(--edge)}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button.primary{background:linear-gradient(#4b93d6,#2f6aa6);color:#fff}
+button.danger{background:linear-gradient(#c9594c,#95382f);color:#fff}
+button.ghost{background:transparent;box-shadow:none;border-color:var(--line)}
+button.ghost:active:not(:disabled){transform:none}
+button.sm{padding:3px 10px;font-size:12px;box-shadow:inset 0 1px 0 #fff3,0 2px 0 var(--edge)}
+button.sm:active:not(:disabled){transform:translateY(2px);box-shadow:inset 0 1px 0 #fff3,0 0 0 var(--edge)}
+button:disabled{opacity:.4;cursor:not-allowed;filter:grayscale(.6)}button.busy{opacity:.65;cursor:progress}
+
+/* explorer */
+button.inst{display:flex;align-items:center;gap:9px;width:100%;text-align:left;background:none;border:0;border-left:3px solid transparent;border-radius:3px;box-shadow:none;padding:8px 10px;margin-bottom:2px}
+button.inst:hover:not(:disabled){background:#ffffff0d;filter:none}
+button.inst:active:not(:disabled){transform:none;box-shadow:none}
+button.inst.on{background:#3f86c722;border-left-color:var(--accent);color:#fff;font-weight:700}
+.inst .nm{flex:1;overflow:hidden;text-overflow:ellipsis}.inst .pt{color:var(--muted);font:12px var(--mono)}
+.dot{width:10px;height:10px;border-radius:2px;background:#6b727d;box-shadow:inset 0 1px 0 #fff5,inset 0 -2px 0 #0004}
+.dot.up{background:var(--ok);animation:pulse 2s infinite}.dot.down{background:var(--bad)}
+
+/* instance header */
+.top{display:flex;align-items:center;gap:14px;padding:16px 18px;flex-wrap:wrap}
+.thumb{padding:10px 9px;background:var(--field);border:1px solid var(--line);border-radius:4px;box-shadow:inset 0 2px 0 #0008}
+.ttl h2{margin:0;font-size:22px;line-height:1.2}.ttl small{display:block;font-family:var(--mono)}
+.pill{padding:3px 12px;border-radius:3px;font-weight:700;font-size:12px;background:var(--field);color:var(--muted);border:1px solid var(--line)}
+.pill.up{color:var(--ok);border-color:#58b78466;animation:glow 2.4s infinite}.pill.down{color:var(--bad);border-color:#d9594c66}
+
+/* stats */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:16px}
+.stat{padding:11px 14px 12px;min-width:0}.stat small{display:block;color:var(--muted)}
+.stat b{display:block;font-size:19px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+.meter{height:8px;margin-top:8px;background:var(--field);border-radius:2px;box-shadow:inset 0 1px 0 #000a;overflow:hidden}
+.meter i{display:block;height:100%;background:repeating-linear-gradient(90deg,var(--accent) 0 8px,var(--accent-d) 8px 10px)}
+.meter.in i{animation:fill 1s cubic-bezier(.2,.8,.2,1)}
+
+/* tabs and panel */
+.tabs{display:flex;gap:4px;padding:10px 12px 0;background:var(--plate-lo);border-radius:6px 6px 0 0;border-bottom:3px solid var(--edge);flex-wrap:wrap}
+.tabs button{background:linear-gradient(#3b404a,#2f333a);border-bottom:0;border-radius:4px 4px 0 0;box-shadow:inset 0 1px 0 #fff2;color:var(--muted);padding:8px 15px}
+.tabs button:active:not(:disabled){transform:none}
+.tabs button.on{color:#fff;background:linear-gradient(#3f7db8,#2b5c8c)}
+#panel{padding:18px;overflow-x:auto}
+table{border-collapse:collapse;width:100%}
+th{text-align:left;color:var(--muted);padding:7px 10px;border-bottom:2px solid var(--edge);background:var(--plate-lo)}
+td{padding:8px 10px;border-bottom:1px solid #00000050;vertical-align:middle}
+tbody tr:nth-child(even){background:#ffffff06}tbody tr{transition:background .15s}tbody tr:hover{background:#3f86c71c}
+td.mono{font:12px var(--mono)}td.q{max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:12px var(--mono);color:var(--muted)}
+.sum{display:flex;gap:26px;margin-bottom:14px;flex-wrap:wrap;color:var(--muted)}.sum b{font-size:20px;margin-right:6px;color:var(--ink)}
+input,select,textarea{font:inherit;color:var(--ink);background:var(--field);border:1px solid #000;border-radius:4px;padding:7px 9px;box-shadow:inset 0 2px 0 #0008;min-width:0}
+input[type=checkbox]{accent-color:var(--accent);box-shadow:none}
+label{display:grid;gap:4px;color:var(--muted);font-size:12px}label.chk{display:flex;gap:8px;align-items:center;color:var(--ink);font-size:13px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.end{justify-content:flex-end}
+.copyrow{display:flex;gap:8px;margin-top:6px}.copyrow input{flex:1;font:12.5px var(--mono)}
+pre{margin:0;white-space:pre-wrap;word-break:break-word;font:12.5px/1.55 var(--mono)}
+pre.log{background:var(--term);color:var(--term-ink);padding:12px;border:1px solid #000;border-radius:4px;max-height:420px;overflow:auto;margin-top:12px;box-shadow:inset 0 2px 0 #000}
+
+/* command output window */
+#results{padding:16px 14px 8px;position:sticky;top:14px}
+#results .head{display:flex;align-items:center;margin-bottom:12px}#results .head h2{flex:1;margin:0}
+#cards{max-height:calc(100vh - 150px);overflow:auto;padding:2px 4px 10px 2px}
+@media(max-width:1250px){#results{position:static}#cards{max-height:none}}
+.res{margin-bottom:16px;border-radius:4px;overflow:hidden;background:var(--term);border:1px solid #000;border-left:5px solid var(--ok);box-shadow:0 3px 0 var(--edge)}
+.res.fail{border-left-color:var(--bad)}
+.res header{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:7px 10px;background:linear-gradient(#2f343c,#242830)}
+.res header b{flex:1;font-size:12.5px;color:#fff}.res header span{font-size:11.5px;color:var(--muted)}
+.res header .rc{font:700 12px var(--mono);color:var(--ok)}.res.fail header .rc{color:var(--bad)}
+.res pre{padding:9px 12px;color:var(--term-ink)}.res .cmd{color:#7fb0e0;background:#0b0e11;border-bottom:1px solid #000}
+.res .se{color:#f0a398;background:#1d1214}.res .none{padding:10px 12px;color:var(--muted);font-style:italic}
+
+/* dialogs, toast, footer */
+dialog{border:1px solid #000;border-radius:6px;padding:22px;width:min(580px,94vw);color:var(--ink);background:linear-gradient(var(--plate-hi),var(--plate) 30px);box-shadow:0 6px 0 var(--edge),0 30px 60px #000b}
+dialog::backdrop{background:#05070acc}dialog h3{margin:0 0 8px;font-size:16px}dialog form{display:grid;gap:14px}
+#toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:#101317;color:var(--ink);border:1px solid var(--line);border-left:5px solid var(--accent);padding:10px 18px;border-radius:4px;box-shadow:0 4px 0 var(--edge);display:none;max-width:90vw;z-index:9}
+#toast.bad{border-left-color:var(--bad)}
+footer{position:relative;z-index:1;text-align:center;color:var(--muted);padding:18px 14px 26px;font-size:12px}
+
+/* motion */
+@keyframes drop{from{transform:translateY(-70px) rotate(-10deg);opacity:0}55%{opacity:1}}
+@keyframes swim{50%{transform:translateY(-3px) rotate(-3deg)}}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 #58b78466}50%{box-shadow:0 0 0 5px #58b78400}}
+@keyframes glow{50%{box-shadow:0 0 12px #58b78455}}
+@keyframes fill{from{width:0}}
+@keyframes build{from{opacity:0;transform:translateY(-22px)}}
+@keyframes rin{from{transform:translateY(-26px) scale(.97);opacity:0}}
+@keyframes pin{from{opacity:0;transform:translateY(8px)}}
+@keyframes pop{from{transform:scale(.92);opacity:0}}
+@keyframes drift{to{background-position:48px 48px,0 0}}
+.app>aside{animation:build .6s cubic-bezier(.3,1.4,.5,1) .15s both}
+.app>#main{animation:build .6s cubic-bezier(.3,1.4,.5,1) .27s both}
+.app>#results{animation:build .6s cubic-bezier(.3,1.4,.5,1) .39s both}
+body{animation:drift 70s linear infinite}
+.res{animation:rin .45s cubic-bezier(.3,1.5,.5,1)}
+#panel.swap{animation:pin .22s ease-out}
+dialog[open]{animation:pop .25s cubic-bezier(.3,1.5,.5,1)}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+</style>
+{% endraw %}
+</head>
+<body>
+<header class="topbar">
+  <div class="logo" aria-label="{{ app_name }}"><span id="logoFish"></span>
+    <div class="bricks"><i style="--i:0">T</i><i style="--i:1">u</i><i style="--i:2">n</i><i style="--i:3">a</i><i class="f" style="--i:4">F</i><i class="f" style="--i:5">o</i><i class="f" style="--i:6">l</i><i class="f" style="--i:7">d</i></div></div>
+  <span class="grow"></span>
+  <div class="hud"><span class="chip"><span class="led"></span><span id="online">0 of 0 instances online</span></span><span class="chip">localhost only</span><span class="chip mono" id="clock">00:00:00</span></div>
+</header>
+<div class="app">
+  <aside>
+    <h2>Explorer <span class="count" id="exCount">0</span></h2><div id="list"></div>
+    <div class="side-btns"><button class="primary" data-act="new" data-mode="create">Create instance</button>
+    <button data-act="new" data-mode="register">Register existing</button></div>
+  </aside>
+  <main id="main"><div class="card empty" style="padding:24px">Select an instance, or create one to get started.</div></main>
+  <section id="results"><div class="head"><h2>Command output</h2><button class="sm ghost" data-act="clear">Clear</button></div><div id="cards"><p class="empty" id="noRes">Every command you run shows its full output here.</p></div></section>
+</div>
+<footer>TunaFold runs on this machine only. Nothing leaves localhost.</footer>
+<dialog id="ask"></dialog>
+<dialog id="form"></dialog>
+<div id="toast"></div>
+{% raw %}
+<script>
+const $=(s,r=document)=>r.querySelector(s), enc=encodeURIComponent, cap=s=>s[0].toUpperCase()+s.slice(1);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const S={list:[],sel:null,tab:'databases',info:null};
+const cur=()=>S.list.find(i=>i.name===S.sel), base=()=>`/api/instances/${enc(S.sel)}`;
+
+async function api(method,url,body){
+  const r=await fetch(url,{method,headers:{'Content-Type':'application/json','X-Requested-With':'pgdash'},body:body?JSON.stringify(body):undefined});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(typeof j.detail==='string'?j.detail:JSON.stringify(j.detail||j));
+  return j;
+}
+function toast(m,bad){const t=$('#toast');t.textContent=m;t.className=bad?'bad':'';t.style.display='block';clearTimeout(t._h);t._h=setTimeout(()=>t.style.display='none',bad?6000:2500)}
+async function work(btn,fn){btn&&(btn.disabled=true,btn.classList.add('busy'));try{return await fn()}finally{btn&&(btn.disabled=false,btn.classList.remove('busy'))}}
+function copy(text){return navigator.clipboard?.writeText(text).catch(()=>fallback(text))||fallback(text)}
+function fallback(t){const a=document.createElement('textarea');a.value=t;document.body.append(a);a.select();document.execCommand('copy');a.remove()}
+function fmtUp(s){s=+s;const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60);return d?`${d}d ${h}h`:h?`${h}h ${m}m`:m?`${m}m ${s%60}s`:`${s}s`}
+
+/* ---------- pixel tuna + count-up ---------- */
+const FISH=['.....xxxx.....','...xxxxxxxx.x.','.xxxxxxxxxxxxx','xxoxxxxxxxxxxx','xxxxxxxxxxxxxx','.xxxxxxxxxxxxx','...xxxxxxxx.x.','.....xxxx.....'];
+const FC=['#2c4562','#35597c','#46709a','#6f93b8','#aebfce','#c9d4de','#d9e1e8','#e8edf1'];
+function fish(w){return `<svg class="fish" width="${w}" height="${Math.round(w*8/14)}" viewBox="0 0 14 8" shape-rendering="crispEdges" aria-hidden="true">${FISH.map((r,y)=>[...r].map((c,x)=>c==='.'?'':`<rect x="${x}" y="${y}" width="1" height="1" fill="${c==='o'?'#0c0e11':FC[y]}"/>`).join('')).join('')}</svg>`}
+function countUp(){document.querySelectorAll('#stats b[data-n]').forEach(el=>{const to=+el.dataset.n,t0=performance.now();(function f(t){const p=Math.min(1,(t-t0)/800);el.textContent=Math.round(to*(1-Math.pow(1-p,3)));if(p<1)requestAnimationFrame(f)})(t0)})}
+
+/* ---------- command result cards ---------- */
+function showResult(r){
+  $('#noRes')?.remove();
+  const ok=r.rc===0, el=document.createElement('div');
+  el.className='res'+(ok?'':' fail');
+  el.innerHTML=`<header><b>${esc(r.title)}</b><span class="rc">${ok?'exit 0':'exit '+r.rc}</span><span>${r.seconds}s at ${esc(r.time)}</span><button class="sm ghost" data-act="copyout">Copy</button></header>
+  <pre class="cmd">$ ${esc(r.cmd)}</pre>
+  ${r.stdout?`<pre class="so">${esc(r.stdout)}</pre>`:''}${r.stderr?`<pre class="se">${esc(r.stderr)}</pre>`:''}
+  ${!r.stdout&&!r.stderr?'<div class="none">The command finished without printing anything.</div>':''}`;
+  el._text=`$ ${r.cmd}\n${r.stdout}${r.stderr}`;
+  $('#cards').prepend(el);
+  while($('#cards').children.length>30) $('#cards').lastChild.remove();
+}
+const showAll=rs=>[...rs].reverse().forEach(showResult);
+
+/* ---------- dialogs ---------- */
+function ask({title,body='',word='',check='',ok='Confirm',danger=false}){
+  return new Promise(res=>{
+    const d=$('#ask');
+    d.innerHTML=`<form method="dialog"><h3>${esc(title)}</h3><div>${esc(body)}</div>
+    ${word?`<label>Type <b>${esc(word)}</b> to confirm<input id="askword" autocomplete="off"></label>`:''}
+    ${check?`<label class="chk"><input type="checkbox" id="askchk"> ${esc(check)}</label>`:''}
+    <div class="row end"><button value="no" class="ghost">Cancel</button><button value="yes" id="askok" class="${danger?'danger':'primary'}">${esc(ok)}</button></div></form>`;
+    const w=$('#askword',d),b=$('#askok',d);
+    if(w){b.disabled=true;w.oninput=()=>b.disabled=w.value!==word}
+    d.returnValue='';
+    d.onclose=()=>res({ok:d.returnValue==='yes',checked:!!$('#askchk',d)?.checked});
+    d.showModal(); (w||b).focus();
+  });
+}
+function openForm(mode){
+  const create=mode==='create', d=$('#form');
+  d.innerHTML=`<form method="dialog" id="f"><h3>${create?'Create a new instance':'Register an existing instance'}</h3>
+  <p class="muted" style="margin:0">${create?'Runs initdb in an empty folder, then registers the instance.':'Point to a data directory that already has a PostgreSQL cluster.'}</p>
+  <div class="grid">
+  <label>Name<input name="name" placeholder="ibadan_dev" required></label>
+  <label>Port<input name="port" type="number" value="5432" required></label>
+  <label style="grid-column:1/-1">Data directory<input name="data_dir" placeholder="C:\\pgdata\\ibadan_dev  or  /home/you/pgdata/ibadan_dev" required></label>
+  <label>Superuser<input name="user" value="postgres"></label>
+  <label>Password${create?' (required)':''}<input name="password" type="password" autocomplete="new-password"></label>
+  <label>Host<input name="host" value="127.0.0.1"></label>
+  <label>Bin folder (optional)<input name="bin_dir" placeholder="C:\\Program Files\\PostgreSQL\\16\\bin"></label>
+  <label>Log file (optional)<input name="log_file" placeholder="data_dir/server.log"></label>
+  <label>systemd service (optional)<input name="service" placeholder="postgresql@16-main"></label></div>
+  ${create?'<label class="chk"><input type="checkbox" name="start" checked> Start it after creating</label>':''}
+  <div class="row end"><button value="no" class="ghost">Cancel</button><button type="button" class="primary" id="fgo">${create?'Create instance':'Register instance'}</button></div></form>`;
+  $('#fgo').onclick=async e=>{
+    const f=$('#f'); if(!f.reportValidity()) return;
+    const v=Object.fromEntries(new FormData(f)); v.port=+v.port; if(create) v.start=!!f.start.checked;
+    await work(e.target,async()=>{
+      try{
+        if(create){const r=await api('POST','/api/instances/create',v);showAll(r.results);if(!r.ok)return toast('initdb failed. See the result card.',true)}
+        else await api('POST','/api/instances',v);
+        d.close(); S.sel=v.name; toast(create?'Instance created':'Instance registered'); await refreshList(); selectInst(v.name);
+      }catch(err){toast(err.message,true)}
+    });
+  };
+  d.showModal();
+}
+
+/* ---------- instance list & header ---------- */
+async function refreshList(){
+  S.list=await api('GET','/api/instances');
+  if(!S.sel&&S.list.length) S.sel=S.list[0].name, selectInst(S.sel,true);
+  if(S.sel&&!cur()){S.sel=null;$('#main').innerHTML='<div class="card empty" style="padding:24px">Select an instance.</div>'}
+  $('#list').innerHTML=S.list.map(i=>`<button class="inst ${i.name===S.sel?'on':''}" data-act="pick" data-n="${esc(i.name)}"><span class="dot ${i.running?'up':'down'}"></span><span class="nm">${esc(i.name)}</span><span class="pt">:${i.port}</span></button>`).join('')||'<p class="empty">No instances yet.</p>';
+  const upN=S.list.filter(i=>i.running).length;
+  $('#online').textContent=`${upN} of ${S.list.length} instance${S.list.length===1?'':'s'} online`; $('#exCount').textContent=S.list.length;
+  syncHeader();
+}
+function selectInst(n,keep){
+  S.sel=n; S.info=null; S._shown=null;
+  $('#main').innerHTML=`<div class="card top"><div class="thumb">${fish(64)}</div><div class="ttl"><h2>${esc(n)}</h2><small class="muted" id="sub"></small></div><span class="pill" id="pill">checking</span><span class="grow"></span>
+    <button data-act="ctl" data-v="start" id="bStart">Start</button><button data-act="ctl" data-v="restart" id="bRestart">Restart</button>
+    <button data-act="ctl" data-v="stop" id="bStop">Stop</button><button class="danger" data-act="del">Delete</button></div>
+    <div class="stats" id="stats"></div>
+    <div class="card"><div class="tabs">${[['databases','Databases'],['connections','Connections'],['credentials','Credentials'],['logs','Logs'],['backup','Backup'],['terminal','Custom command']].map(([k,l])=>`<button data-act="tab" data-t="${k}" class="${k===S.tab?'on':''}">${l}</button>`).join('')}</div><div id="panel"></div></div>`;
+  if(!keep) refreshList(); else syncHeader();
+  loadInfo().then(loadTab);
+}
+function syncHeader(){
+  const i=cur(); if(!i||!$('#pill')) return;
+  const up=i.running; $('#sub').textContent=`${i.host}:${i.port} as ${i.user}`; $('#pill').textContent=up?'Running':'Stopped'; $('#pill').className='pill '+(up?'up':'down');
+  $('#bStart').disabled=up; $('#bStop').disabled=!up; $('#bRestart').disabled=!up;
+}
+async function loadInfo(){
+  if(!S.sel) return; const n=S.sel;
+  try{
+    const i=await api('GET',`/api/instances/${enc(n)}/info`); if(n!==S.sel) return; S.info=i;
+    const c=cur(); if(c) c.running=i.running;
+    const st=[['Port',c?.port,c?.port],['Data directory',c?.data_dir]];
+    if(i.running&&!i.db_error) st.push(['Uptime',fmtUp(i.uptime)],['Connections',`${i.total} of ${i.max_conn}`,null,Math.min(100,i.total/i.max_conn*100)],['Databases',i.databases,i.databases],['Version',i.version.replace('PostgreSQL ','')]);
+    else st.push(['Status',i.running?'Running':'Stopped']);
+    const first=S._shown!==n;
+    $('#stats').innerHTML=st.map(([k,v,cn,bar])=>`<div class="stat"><small>${k}</small><b title="${esc(v)}"${cn!=null?` data-n="${cn}"`:''}>${esc(v)}</b>${bar!=null?`<div class="meter${first?' in':''}"><i style="width:${bar}%"></i></div>`:''}</div>`).join('')+(i.db_error?`<div class="stat err" style="grid-column:1/-1">${esc(i.db_error)}</div>`:'');
+    if(first){S._shown=n;countUp()}
+    syncHeader();
+  }catch(e){toast(e.message,true)}
+}
+
+/* ---------- tabs ---------- */
+const needUp=()=>!S.info?.running?'<p class="empty">Start this instance to see live data.</p>':S.info.db_error?`<p class="err">${esc(S.info.db_error)}<br><span class="muted">Check the credentials tab.</span></p>`:null;
+const T={
+  async databases(){
+    const w=needUp(); if(w) return w;
+    const [dbs,roles]=await Promise.all([api('GET',base()+'/databases'),api('GET',base()+'/roles')]);
+    return `<p class="muted" style="margin-top:0">${dbs.length} database${dbs.length===1?'':'s'}</p><table><thead><tr><th>Database</th><th>Owner</th><th>Size</th><th>Sessions</th><th></th></tr></thead><tbody>
+    ${dbs.map(d=>`<tr><td><b>${esc(d.name)}</b></td><td><select data-own="${esc(d.name)}">${roles.map(r=>`<option ${r===d.owner?'selected':''}>${esc(r)}</option>`).join('')}</select></td><td>${esc(d.size_pretty)}</td><td>${d.conns}</td>
+    <td><button class="sm" data-act="owner" data-db="${esc(d.name)}" data-cur="${esc(d.owner)}">Change owner</button></td></tr>`).join('')}</tbody></table>`;
+  },
+  async connections(){
+    const w=needUp(); if(w) return w;
+    const rows=await api('GET',base()+'/connections'), i=S.info;
+    return `<div class="sum"><span><b>${i.active}</b>active</span><span><b>${i.idle}</b>idle</span><span><b>${i.idle_tx}</b>idle in transaction</span><span><b>${i.total}</b>total of ${i.max_conn}</span></div>
+    <table><thead><tr><th>PID</th><th>User</th><th>Database</th><th>State</th><th>Client</th><th>Since</th><th>Last query</th><th></th></tr></thead><tbody>
+    ${rows.map(r=>`<tr><td class="mono">${r.pid}</td><td>${esc(r.usename)}</td><td>${esc(r.datname)}</td><td>${esc(r.state)}</td><td class="mono">${esc(r.client)}</td><td>${esc(r.since)}</td><td class="q" title="${esc(r.query)}">${esc(r.query)}</td>
+    <td style="white-space:nowrap">${r.me?'<span class="muted">this dashboard</span>':`<button class="sm" data-act="bk" data-mode="cancel" data-pid="${r.pid}">Cancel query</button> <button class="sm danger" data-act="bk" data-mode="terminate" data-pid="${r.pid}">Terminate</button>`}</td></tr>`).join('')}</tbody></table>`;
+  },
+  async credentials(){
+    const c=cur(), db=c.last_db||'postgres';
+    return `<div class="grid"><label>Host<input id="cHost" value="${esc(c.host)}"></label><label>Port<input id="cPort" type="number" value="${c.port}"></label>
+    <label>Username<input id="cUser" value="${esc(c.user)}"></label><label>Password<input id="cPass" type="password" value="${esc(c.password)}" autocomplete="off"></label>
+    <label>Database<input id="cDb" value="${esc(db)}"></label></div>
+    <div class="row" style="margin-top:14px"><button class="primary" data-act="gen">Generate connection string</button><button data-act="savecred">Save credentials</button>
+    <label class="chk"><input type="checkbox" id="cShow"> Show password in string</label></div><div id="genOut"></div>
+    <p class="muted">Saved to instances.json on this machine in plain text.</p>`;
+  },
+  async logs(){
+    const r=await api('GET',base()+'/logs?lines=300');
+    return `<div class="row"><button data-act="reload">Refresh</button><span class="muted mono" style="font-size:12px">${esc(r.path)}</span></div><pre class="log">${esc(r.text)}</pre>`;
+  },
+  async backup(){
+    const w=needUp(); if(w) return w;
+    const dbs=await api('GET',base()+'/databases');
+    return `<div class="row"><label>Database<select id="bDb">${dbs.map(d=>`<option>${esc(d.name)}</option>`).join('')}<option value="__all__">All databases (pg_dumpall)</option></select></label>
+    <button class="primary" data-act="backup" style="align-self:end">Run backup</button></div><p class="muted">Files are saved in the backups folder next to app.py.</p>`;
+  },
+  async terminal(){
+    return `<label>Command<textarea id="cmd" rows="3" placeholder='pg_ctl status -D "C:\\pgdata\\ibadan_dev"' style="font-family:var(--mono)"></textarea></label>
+    <div class="row" style="margin-top:12px"><button class="primary" data-act="runcmd">Run command</button><span class="muted">Runs hidden with your user's permissions. Press Ctrl+Enter to run.</span></div>`;
+  }
+};
+async function loadTab(){
+  const p=$('#panel'); if(!p) return;
+  try{ const h=await T[S.tab](); const pn=$('#panel'); if(pn){pn.innerHTML=h; const k=S.sel+S.tab; if(S._tk!==k){S._tk=k;pn.classList.remove('swap');void pn.offsetWidth;pn.classList.add('swap')}} }catch(e){ p.innerHTML=`<p class="err">${esc(e.message)}</p>` }
+  const l=$('.log'); if(l) l.scrollTop=l.scrollHeight;
+}
+function uri(){
+  const g=id=>$('#'+id).value, pw=$('#cShow').checked?g('cPass'):'********';
+  const u=`postgresql://${enc(g('cUser'))}${g('cPass')?':'+enc(pw):''}@${g('cHost')}:${g('cPort')}/${enc(g('cDb'))}`;
+  return [u,`psql "${u}"`];
+}
+
+/* ---------- click handlers ---------- */
+const H={
+  pick:b=>selectInst(b.dataset.n),
+  tab:b=>{S.tab=b.dataset.t;document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('on',x===b));loadTab()},
+  new:b=>openForm(b.dataset.mode),
+  clear:async()=>{await api('DELETE','/api/history');$('#cards').innerHTML='<p class="empty" id="noRes">Every command you run shows its full output here.</p>'},
+  copyout:b=>{copy(b.closest('.res')._text);toast('Output copied')},
+  reload:loadTab,
+  async ctl(b){
+    const a=b.dataset.v;
+    if(a!=='start'&&!(await ask({title:`${cap(a)} ${S.sel}?`,body:'Everyone connected to this instance will be disconnected.',ok:cap(a),danger:true})).ok) return;
+    await work(b,async()=>{showResult((await api('POST',base()+'/action',{action:a})).result)});
+    await refreshList(); await loadInfo(); loadTab();
+  },
+  async del(b){
+    const r=await ask({title:`Delete ${S.sel}?`,body:'This stops the instance if it is running and removes it from the dashboard. Type the name to continue.',word:S.sel,check:'Also permanently delete its data directory',ok:'Delete instance',danger:true});
+    if(!r.ok) return;
+    await work(b,async()=>{
+      const x=await api('POST',base()+'/delete',{confirm:S.sel,delete_data:r.checked}); showAll(x.results);
+      if(!x.ok) return toast('Delete did not finish. See the result card.',true);
+      toast('Instance deleted'); S.sel=null; await refreshList();
+      if(S.list.length) selectInst(S.list[0].name); else $('#main').innerHTML='<div class="card empty" style="padding:24px">Select an instance, or create one to get started.</div>';
+    });
+  },
+  async owner(b){
+    const db=b.dataset.db, to=$(`select[data-own="${CSS.escape(db)}"]`).value;
+    if(to===b.dataset.cur) return toast('That role already owns the database.');
+    if(!(await ask({title:`Change owner of ${db}?`,body:`${db} will be owned by ${to} instead of ${b.dataset.cur}.`,ok:'Change owner',danger:true})).ok) return;
+    await work(b,async()=>{showResult((await api('POST',base()+'/owner',{db,owner:to})).result)}); loadTab();
+  },
+  async bk(b){
+    const {mode,pid}=b.dataset;
+    if(mode==='terminate'&&!(await ask({title:`Terminate backend ${pid}?`,body:'The client is disconnected and its open transaction is rolled back.',ok:'Terminate',danger:true})).ok) return;
+    await work(b,async()=>{showResult((await api('POST',base()+'/backend',{pid:+pid,mode})).result)}); loadInfo().then(loadTab);
+  },
+  gen:()=>{const [u,p]=uri();$('#genOut').innerHTML=[['Connection URI',u],['psql command',p]].map(([l,v],k)=>`<label style="margin-top:12px">${l}</label><div class="copyrow"><input readonly value="${esc(v)}" id="g${k}"><button data-act="cp" data-id="g${k}">Copy</button></div>`).join('')},
+  cp:b=>{copy($('#'+b.dataset.id).value);toast('Copied')},
+  async savecred(b){
+    const c=cur(), g=id=>$('#'+id).value;
+    await work(b,async()=>{await api('PUT',base(),{...c,host:g('cHost'),port:+g('cPort'),user:g('cUser'),password:g('cPass')});c.last_db=g('cDb');toast('Credentials saved');await refreshList();await loadInfo()});
+  },
+  async backup(b){await work(b,async()=>{showResult((await api('POST',base()+'/backup',{db:$('#bDb').value})).result)})},
+  async runcmd(b){
+    const command=$('#cmd').value; if(!command.trim()) return toast('Enter a command first.',true);
+    await work(b,async()=>{showResult((await api('POST','/api/run',{command})).result)}); loadInfo();
+  }
+};
+document.addEventListener('click',async e=>{
+  const b=e.target.closest('[data-act]'); if(!b||!H[b.dataset.act]) return;
+  try{await H[b.dataset.act](b)}catch(err){toast(err.message,true)}
+});
+document.addEventListener('keydown',e=>{if(e.ctrlKey&&e.key==='Enter'&&e.target.id==='cmd') H.runcmd($('[data-act=runcmd]'))});
+
+async function tick(){
+  if(document.hidden||document.querySelector('dialog[open]')) return;
+  try{await refreshList(); await loadInfo(); if(S.tab==='connections') loadTab()}catch(e){}
+}
+(async()=>{
+  $('#logoFish').innerHTML=fish(56);
+  const clk=()=>$('#clock').textContent=new Date().toLocaleTimeString([],{hour12:false}); clk(); setInterval(clk,1000);
+  try{showAll(await api('GET','/api/history'))}catch(e){}
+  try{await refreshList()}catch(e){toast(e.message,true)}
+  setInterval(tick,5000);
+})();
+</script>
+{% endraw %}
+</body>
+</html>

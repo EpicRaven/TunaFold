@@ -1,0 +1,13 @@
+# secrets and runtime data
+instances.json
+backups/
+
+# python
+.venv/
+.venv-run/
+__pycache__/
+*.pyc
+
+# local postgres data and logs
+pgdata/
+*.log
